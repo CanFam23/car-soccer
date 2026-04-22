@@ -1,4 +1,5 @@
 import sys
+import math
 import pygame
 
 from ball import Ball
@@ -91,6 +92,102 @@ def draw_field():
     SCREEN.blit(text, (Screen.WIDTH // 2 - text.get_width() // 2, UI.TITLE_Y))
 
 
+def resolve_ball_player_collisions(players):
+    """Resolve ball-vs-player contacts with iterative solving.
+
+    Multiple passes are important when the ball is squeezed by both players
+    in the same frame.
+    """
+    restitution = 0.86
+    tangential_transfer = 0.24
+    separation_slop = 0.03
+    max_solver_iterations = 6
+
+    # Avoid adding tangential energy multiple times from the same player
+    # during iterative resolution in one frame.
+    tangential_applied_to = set()
+
+    for _ in range(max_solver_iterations):
+        had_collision = False
+
+        for player in players:
+            collision = player.get_ball_collision_normal(ball)
+            if not collision:
+                continue
+
+            had_collision = True
+            nx, ny, penetration = collision
+
+            # Positional correction keeps the ball from tunneling through
+            # when multiple bodies are interacting in one frame.
+            correction = max(0.0, penetration) + separation_slop
+            ball.x += nx * correction
+            ball.y += ny * correction
+
+            # Work in player-relative frame.
+            pvx, pvy = player.velocity
+            rvx = ball.vx - pvx
+            rvy = ball.vy - pvy
+            speed_into_surface = rvx * nx + rvy * ny
+
+            if speed_into_surface < 0:
+                impulse = -(1.0 + restitution) * speed_into_surface
+                rvx += impulse * nx
+                rvy += impulse * ny
+
+            # Tangential transfer gives glancing hits better feel.
+            if player.id not in tangential_applied_to:
+                tx, ty = -ny, nx
+                tangential_player_speed = pvx * tx + pvy * ty
+                rvx += tangential_transfer * tangential_player_speed * tx
+                rvy += tangential_transfer * tangential_player_speed * ty
+                tangential_applied_to.add(player.id)
+
+            ball.vx = rvx + pvx
+            ball.vy = rvy + pvy
+
+        if not had_collision:
+            break
+
+
+def resolve_ball_wall_bounce():
+    """Bounce the ball off field boundaries."""
+    if ball.x - ball.radius < Field.MARGIN:
+        ball.x = Field.MARGIN + ball.radius
+        ball.vx = -ball.vx
+    elif ball.x + ball.radius > Screen.WIDTH - Field.MARGIN:
+        ball.x = Screen.WIDTH - Field.MARGIN - ball.radius
+        ball.vx = -ball.vx
+
+    if ball.y - ball.radius < Field.MARGIN:
+        ball.y = Field.MARGIN + ball.radius
+        ball.vy = -ball.vy
+    elif ball.y + ball.radius > Screen.HEIGHT - Field.MARGIN:
+        ball.y = Screen.HEIGHT - Field.MARGIN - ball.radius
+        ball.vy = -ball.vy
+
+
+def advance_ball(players):
+    """Advance the ball with sub-steps so it cannot tunnel through players."""
+    speed = math.hypot(ball.vx, ball.vy)
+    max_step_distance = max(1.0, ball.radius * 0.25)
+    steps = max(1, int(math.ceil(speed / max_step_distance)))
+
+    for _ in range(steps):
+        ball.x += ball.vx / steps
+        ball.y += ball.vy / steps
+        resolve_ball_wall_bounce()
+        resolve_ball_player_collisions(players)
+
+    # Apply frame friction once after all sub-steps.
+    ball.vx *= ball.friction
+    ball.vy *= ball.friction
+    if abs(ball.vx) < 0.1:
+        ball.vx = 0
+    if abs(ball.vy) < 0.1:
+        ball.vy = 0
+
+
 def run_game():
     while True:
         CLOCK.tick(Screen.FPS)
@@ -108,7 +205,7 @@ def run_game():
         player1.handle_input(player2)
         player2.handle_input(player1)
 
-        ball.update()
+        advance_ball([player1, player2])
 
         # Check for goals
         if ball.x - ball.radius < Field.MARGIN + Field.GOAL_WIDTH and left_goal.top < ball.y < left_goal.bottom:
@@ -117,41 +214,6 @@ def run_game():
         elif ball.x + ball.radius > Screen.WIDTH - Field.MARGIN - Field.GOAL_WIDTH and right_goal.top < ball.y < right_goal.bottom:
             print("Goal for Player 1!")
             reset()
-
-        # Check collisions with players
-        for player in [player1, player2]:
-            collision = player.get_ball_collision_normal(ball)
-            if not collision:
-                continue
-
-            nx, ny, penetration = collision
-
-            # Positional correction prevents repeated "stuck" collisions.
-            ball.x += nx * (penetration + 0.01)
-            ball.y += ny * (penetration + 0.01)
-
-            # Work in the player moving frame so player motion transfers naturally.
-            pvx, pvy = player.velocity
-            rvx = ball.vx - pvx
-            rvy = ball.vy - pvy
-            speed_into_surface = rvx * nx + rvy * ny
-
-            restitution = 0.86
-
-            if speed_into_surface < 0:
-                impulse = -(1.0 + restitution) * speed_into_surface
-                rvx += impulse * nx
-                rvy += impulse * ny
-
-            # Add some side spin/drag from player's tangential movement.
-            tx, ty = -ny, nx
-            tangential_player_speed = pvx * tx + pvy * ty
-            tangential_transfer = 0.24
-            rvx += tangential_transfer * tangential_player_speed * tx
-            rvy += tangential_transfer * tangential_player_speed * ty
-
-            ball.vx = rvx + pvx
-            ball.vy = rvy + pvy
 
         draw_field()
 
