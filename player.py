@@ -12,12 +12,12 @@ class Player:
         """Creates a new player with car-like movement."""
         self.id = id
 
-        # float position for smoother movement
+        # Float position keeps movement smooth; rect is updated for rendering/collision.
         self.pos = [float(x), float(y)]
         self.width = width
         self.height = height
 
-        # logical center-based rect used for general placement
+        # Logical body used for bounds and oriented-collision reference center.
         self.rect = pygame.Rect(x, y, self.width, self.height)
 
         # facing direction
@@ -28,11 +28,10 @@ class Player:
             self.direction = [1.0, 0.0]   # face right
             self.side_order = ['front', 'back', 'left', 'right']
 
-        # movement state
+        # 1 forward, -1 backward, 0 idle (useful for effects/tuning).
         self.move_dir = 0   # 1 forward, -1 backward, 0 idle
 
-        # car-like motion
-        # Velocity vector [vx, vy]
+        # Car-like forward/back scalar speed projected onto facing direction.
         self.velocity = [0.0, 0.0]
         self.accel = 0.2
         self.max_speed = float(speed)
@@ -50,7 +49,7 @@ class Player:
         self.image = self.base_image
         self.mask = pygame.mask.from_surface(self.image)
 
-        # bounding rect of rotated image
+        # Bounding rect of current rotated sprite.
         self.rotated_rect = self.image.get_rect(center=self.rect.center)
 
         self.update_sprite()
@@ -153,7 +152,7 @@ class Player:
         The normal points from the player toward the ball.
         Returns ``(nx, ny, penetration)`` or ``None`` when not colliding.
         """
-        # Player orientation basis
+        # Build player-local basis (right/forward) from facing direction.
         fx, fy = self.direction
         forward_len = math.hypot(fx, fy)
         if forward_len == 0:
@@ -175,7 +174,7 @@ class Player:
         half_w = self.width * 0.5
         half_h = self.height * 0.5
 
-        # Closest point on the oriented rectangle in local coords.
+        # Closest point on oriented rectangle (OBB) in local coordinates.
         clamped_x = max(-half_w, min(local_x, half_w))
         clamped_y = max(-half_h, min(local_y, half_h))
         closest_x = cx + rx * clamped_x + fx * clamped_y
@@ -189,14 +188,14 @@ class Player:
         if dist >= ball.radius:
             return None
 
-        # Standard circle-vs-OBB contact.
+        # Typical circle-vs-OBB contact case.
         if dist > 1e-6:
             nx = dx / dist
             ny = dy / dist
             penetration = ball.radius - dist
             return nx, ny, penetration
 
-        # Ball center is on/in the body: pick nearest face normal in local frame.
+        # Degenerate case: center is on/in body, choose nearest face normal.
         dist_to_x_face = half_w - abs(local_x)
         dist_to_y_face = half_h - abs(local_y)
 
@@ -218,7 +217,8 @@ class Player:
         ny /= normal_len
         return nx, ny, penetration
 
-    def handle_input(self, other: "Player") -> None:
+    def handle_input(self, _other: "Player") -> None:
+        """Handle car-like acceleration/turning and field boundary movement."""
         keys = pygame.key.get_pressed()
         controls = Controls.PLAYER.get(self.id)
         if not controls:
@@ -266,9 +266,6 @@ class Player:
         self.velocity[0] = self.direction[0] * speed_along_direction
         self.velocity[1] = self.direction[1] * speed_along_direction
 
-        old_pos = self.pos[:]
-        old_center = self.rect.center
-
         new_x = self.pos[0] + self.velocity[0]
         new_y = self.pos[1] + self.velocity[1]
 
@@ -294,13 +291,6 @@ class Player:
 
         # keep rotated rect/mask centered on new position
         self.update_sprite()
-
-        # rotated collision
-        if self.collides_with_player(other):
-            self.pos = old_pos
-            self.rect.center = old_center
-            self.velocity = [0.0, 0.0]
-            self.update_sprite()
 
     def draw(self, surface) -> None:
         """Draw the rotated player"""

@@ -28,7 +28,7 @@ right_goal = pygame.Rect(
 ball = Ball(BallConfig.START_X, BallConfig.START_Y, BallConfig.RADIUS, Colors.YELLOW)
 font = pygame.font.SysFont(None, UI.TITLE_FONT_SIZE)
 
-# starting x, y, width, height, and speed
+# Spawn players at their kickoff positions.
 player1 = Player(
     Players.PLAYER_1_ID,
     Players.PLAYER_1_START_X,
@@ -92,19 +92,114 @@ def draw_field():
     SCREEN.blit(text, (Screen.WIDTH // 2 - text.get_width() // 2, UI.TITLE_Y))
 
 
-def resolve_ball_player_collisions(players):
-    """Resolve ball-vs-player contacts with iterative solving.
+def sync_player_state(player):
+    """Write float position back to rect/sprite state after manual position edits."""
+    player.rect.x = int(player.pos[0])
+    player.rect.y = int(player.pos[1])
+    player.update_sprite()
 
-    Multiple passes are important when the ball is squeezed by both players
+
+def clamp_player_to_field(player):
+    """Keep a player inside the field after separation pushes."""
+    min_x = Field.MARGIN
+    max_x = Screen.WIDTH - Field.MARGIN - player.rect.width
+    min_y = Field.MARGIN
+    max_y = Screen.HEIGHT - Field.MARGIN - player.rect.height
+    player.pos[0] = max(min_x, min(player.pos[0], max_x))
+    player.pos[1] = max(min_y, min(player.pos[1], max_y))
+
+
+def clamp_player_speed(player):
+    """Cap post-collision speed so bounces feel small and controlled."""
+    speed = math.hypot(player.velocity[0], player.velocity[1])
+    max_allowed = player.max_speed * 1.05
+    if speed > max_allowed and speed > 0:
+        scale = max_allowed / speed
+        player.velocity[0] *= scale
+        player.velocity[1] *= scale
+
+
+def resolve_player_player_collision(player_a, player_b):
+    """Separate overlapping players and apply a small bounce impulse."""
+    if not player_a.collides_with_player(player_b):
+        return
+
+    dx = player_a.rect.centerx - player_b.rect.centerx
+    dy = player_a.rect.centery - player_b.rect.centery
+    dist = math.hypot(dx, dy)
+
+    if dist > 1e-6:
+        nx = dx / dist
+        ny = dy / dist
+    else:
+        rvx = player_a.velocity[0] - player_b.velocity[0]
+        rvy = player_a.velocity[1] - player_b.velocity[1]
+        rv_len = math.hypot(rvx, rvy)
+        if rv_len > 1e-6:
+            nx = rvx / rv_len
+            ny = rvy / rv_len
+        else:
+            nx, ny = 1.0, 0.0
+
+    # Tunables for player-player body feel.
+    # `separation_step` controls how aggressively overlap is resolved.
+    # `max_separation_iterations` prevents infinite loops in edge cases.
+    separation_step = 0.8
+    max_separation_iterations = 24
+    for _ in range(max_separation_iterations):
+        if not player_a.collides_with_player(player_b):
+            break
+
+        player_a.pos[0] += nx * separation_step
+        player_a.pos[1] += ny * separation_step
+        player_b.pos[0] -= nx * separation_step
+        player_b.pos[1] -= ny * separation_step
+
+        clamp_player_to_field(player_a)
+        clamp_player_to_field(player_b)
+        sync_player_state(player_a)
+        sync_player_state(player_b)
+
+    # Apply normal impulse only when players are moving into each other.
+    # `restitution` controls bounceiness (0 = sticky, 1 = very bouncy).
+    rvx = player_a.velocity[0] - player_b.velocity[0]
+    rvy = player_a.velocity[1] - player_b.velocity[1]
+    normal_speed = rvx * nx + rvy * ny
+    restitution = 0.9
+    if normal_speed < 0:
+        impulse = -(1.0 + restitution) * normal_speed * 0.5
+        player_a.velocity[0] += impulse * nx
+        player_a.velocity[1] += impulse * ny
+        player_b.velocity[0] -= impulse * nx
+        player_b.velocity[1] -= impulse * ny
+
+    # Small constant recoil gives visible feedback on gentle contacts.
+    recoil = 0.12
+    player_a.velocity[0] += recoil * nx
+    player_a.velocity[1] += recoil * ny
+    player_b.velocity[0] -= recoil * nx
+    player_b.velocity[1] -= recoil * ny
+
+    clamp_player_speed(player_a)
+    clamp_player_speed(player_b)
+
+
+def resolve_ball_player_collisions(players):
+    """Resolve ball/player contacts with iterative impulses.
+
+    Multiple passes handle squeeze cases where the ball touches both players
     in the same frame.
     """
+    # Ball contact tuning:
+    # `restitution` is bounceiness.
+    # `tangential_transfer` transfers a bit of player side-motion into the ball.
+    # `separation_slop` prevents tiny re-penetration jitter.
     restitution = 0.86
     tangential_transfer = 0.24
     separation_slop = 0.03
     max_solver_iterations = 6
 
-    # Avoid adding tangential energy multiple times from the same player
-    # during iterative resolution in one frame.
+    # Avoid injecting tangential energy multiple times per player per frame.
     tangential_applied_to = set()
 
     for _ in range(max_solver_iterations):
@@ -118,13 +213,12 @@ def resolve_ball_player_collisions(players):
             had_collision = True
             nx, ny, penetration = collision
 
-            # Positional correction keeps the ball from tunneling through
-            # when multiple bodies are interacting in one frame.
+            # Positional correction resolves overlap before velocity impulses.
             correction = max(0.0, penetration) + separation_slop
             ball.x += nx * correction
             ball.y += ny * correction
 
-            # Work in player-relative frame.
+            # Reflect the ball in the moving player's frame, then convert back.
             pvx, pvy = player.velocity
             rvx = ball.vx - pvx
             rvy = ball.vy - pvy
@@ -135,7 +229,7 @@ def resolve_ball_player_collisions(players):
                 rvx += impulse * nx
                 rvy += impulse * ny
 
-            # Tangential transfer gives glancing hits better feel.
+            # Tangential transfer adds "spin-like" influence on glancing hits.
             if player.id not in tangential_applied_to:
                 tx, ty = -ny, nx
                 tangential_player_speed = pvx * tx + pvy * ty
@@ -168,8 +262,9 @@ def resolve_ball_wall_bounce():
 
 
 def advance_ball(players):
-    """Advance the ball with sub-steps so it cannot tunnel through players."""
+    """Advance ball with sub-steps to prevent frame-skipping through colliders."""
     speed = math.hypot(ball.vx, ball.vy)
+    # Smaller step size = more robust collisions at high speed.
     max_step_distance = max(1.0, ball.radius * 0.25)
     steps = max(1, int(math.ceil(speed / max_step_distance)))
 
@@ -204,6 +299,7 @@ def run_game():
 
         player1.handle_input(player2)
         player2.handle_input(player1)
+        resolve_player_player_collision(player1, player2)
 
         advance_ball([player1, player2])
 
