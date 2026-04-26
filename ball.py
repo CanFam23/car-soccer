@@ -1,5 +1,5 @@
 import pygame
-from constants import Field, Screen
+from constants import Ball as BallConfig, Field, Screen
 
 
 class Ball:
@@ -11,6 +11,9 @@ class Ball:
         self.vx = 0
         self.vy = 0
         self.friction = 0.98
+        diameter = self.radius * 2
+        image = pygame.image.load(BallConfig.SPRITE).convert_alpha()
+        self.image = pygame.transform.smoothscale(image, (diameter, diameter))
 
     def update(self):
         self.x += self.vx
@@ -37,4 +40,5 @@ class Ball:
             self.vy = -self.vy
 
     def draw(self, surface) -> None:
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
+        rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+        surface.blit(self.image, rect)

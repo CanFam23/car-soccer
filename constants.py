@@ -4,8 +4,12 @@ Add new constants by adding to the class that best fits.
 """
 
 import math
+from pathlib import Path
 
 import pygame
+
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
 class Screen:
@@ -37,6 +41,7 @@ class Ball:
     RADIUS = 12
     START_X = Screen.WIDTH // 2
     START_Y = Screen.HEIGHT // 2
+    SPRITE = BASE_DIR / "sprites" / "ball" / "football.png"
 
 
 class UI:
@@ -57,9 +62,15 @@ class Players:
     PLAYER_2_START_X = 80
     START_Y_OFFSET = 20
 
-    WIDTH = 40
-    HEIGHT = 40
+    VISUAL_WIDTH = 64
+    VISUAL_HEIGHT = 64
+    HITBOX_WIDTH = 46
+    HITBOX_HEIGHT = 46
     SPEED = 7
+    SPRITES = {
+        PLAYER_1_ID: BASE_DIR / "sprites" / "cars" / "RedStrip.png",
+        PLAYER_2_ID: BASE_DIR / "sprites" / "cars" / "WhiteStrip.png",
+    }
 
     INITIAL_DIRECTION = (1, 0)
     # Preserves the existing rotation behavior in player.py.

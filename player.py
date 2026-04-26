@@ -41,9 +41,15 @@ class Player:
         # turning
         self.theta = Players.ROTATION_STEP
 
-        # base sprite used for rotation
-        self.base_image = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        self.base_image.fill(Players.COLOR)
+        # Base sprite faces right; rotation aligns it to the current direction.
+        sprite_path = Players.SPRITES.get(self.id)
+        visual_size = (Players.VISUAL_WIDTH, Players.VISUAL_HEIGHT)
+        if sprite_path:
+            image = pygame.image.load(sprite_path).convert_alpha()
+            self.base_image = pygame.transform.smoothscale(image, visual_size)
+        else:
+            self.base_image = pygame.Surface(visual_size, pygame.SRCALPHA)
+            self.base_image.fill(Players.COLOR)
 
         # rotated draw/collision state
         self.image = self.base_image
@@ -80,16 +86,56 @@ class Player:
         self.direction = [new_x, new_y]
         self.update_sprite()
 
-    def collides_with_player(self, other: "Player") -> bool:
-        """Pixel-perfect rotated collision against another player."""
-        if not self.rotated_rect.colliderect(other.rotated_rect):
-            return False
+    def get_local_basis(self) -> tuple[float, float, float, float]:
+        """Return normalized right and forward vectors for the rotated hitbox."""
+        fx, fy = self.direction
+        forward_len = math.hypot(fx, fy)
+        if forward_len == 0:
+            fx, fy = 1.0, 0.0
+        else:
+            fx /= forward_len
+            fy /= forward_len
+        rx, ry = -fy, fx
+        return rx, ry, fx, fy
 
-        offset = (
-            other.rotated_rect.left - self.rotated_rect.left,
-            other.rotated_rect.top - self.rotated_rect.top
-        )
-        return self.mask.overlap(other.mask, offset) is not None
+    def get_hitbox_corners(self) -> list[tuple[float, float]]:
+        """Return corners for the smaller rotated collision box."""
+        rx, ry, fx, fy = self.get_local_basis()
+        cx, cy = self.rect.centerx, self.rect.centery
+        half_w = self.width * 0.5
+        half_h = self.height * 0.5
+
+        return [
+            (cx - rx * half_w - fx * half_h, cy - ry * half_w - fy * half_h),
+            (cx + rx * half_w - fx * half_h, cy + ry * half_w - fy * half_h),
+            (cx + rx * half_w + fx * half_h, cy + ry * half_w + fy * half_h),
+            (cx - rx * half_w + fx * half_h, cy - ry * half_w + fy * half_h),
+        ]
+
+    @staticmethod
+    def _project_points(points: list[tuple[float, float]], axis: tuple[float, float]) -> tuple[float, float]:
+        ax, ay = axis
+        projections = [x * ax + y * ay for x, y in points]
+        return min(projections), max(projections)
+
+    def collides_with_player(self, other: "Player") -> bool:
+        """Rotated collision against the smaller logical hitboxes."""
+        own_corners = self.get_hitbox_corners()
+        other_corners = other.get_hitbox_corners()
+        axes = [
+            self.get_local_basis()[0:2],
+            self.get_local_basis()[2:4],
+            other.get_local_basis()[0:2],
+            other.get_local_basis()[2:4],
+        ]
+
+        for axis in axes:
+            own_min, own_max = self._project_points(own_corners, axis)
+            other_min, other_max = self._project_points(other_corners, axis)
+            if own_max < other_min or other_max < own_min:
+                return False
+
+        return True
 
     def get_collision_side_player(self, other: "Player"):
         """
@@ -152,15 +198,7 @@ class Player:
         The normal points from the player toward the ball.
         Returns ``(nx, ny, penetration)`` or ``None`` when not colliding.
         """
-        # Build player-local basis (right/forward) from facing direction.
-        fx, fy = self.direction
-        forward_len = math.hypot(fx, fy)
-        if forward_len == 0:
-            fx, fy = 1.0, 0.0
-        else:
-            fx /= forward_len
-            fy /= forward_len
-        rx, ry = -fy, fx
+        rx, ry, fx, fy = self.get_local_basis()
 
         cx, cy = self.rect.centerx, self.rect.centery
         bx, by = float(ball.x), float(ball.y)
@@ -295,11 +333,5 @@ class Player:
     def draw(self, surface) -> None:
         """Draw the rotated player"""
         surface.blit(self.image, self.rotated_rect.topleft)
-
-        center = self.rotated_rect.center
-        line_length = 30
-        end_pos = (
-            center[0] + int(self.direction[0] * line_length),
-            center[1] + int(self.direction[1] * line_length)
-        )
-        pygame.draw.line(surface, (255, 0, 0), center, end_pos, 3)
+        pygame.draw.rect(surface, (255, 255, 0), self.rotated_rect, 1)
+        pygame.draw.polygon(surface, (0, 255, 255), self.get_hitbox_corners(), 1)

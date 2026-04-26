@@ -33,16 +33,16 @@ player1 = Player(
     Players.PLAYER_1_ID,
     Players.PLAYER_1_START_X,
     Screen.HEIGHT // 2 - Players.START_Y_OFFSET,
-    Players.WIDTH,
-    Players.HEIGHT,
+    Players.HITBOX_WIDTH,
+    Players.HITBOX_HEIGHT,
     Players.SPEED,
 )
 player2 = Player(
     Players.PLAYER_2_ID,
     Players.PLAYER_2_START_X,
     Screen.HEIGHT // 2 - Players.START_Y_OFFSET,
-    Players.WIDTH,
-    Players.HEIGHT,
+    Players.HITBOX_WIDTH,
+    Players.HITBOX_HEIGHT,
     Players.SPEED,
 )
 
@@ -330,16 +330,16 @@ def reset():
         Players.PLAYER_1_ID,
         Players.PLAYER_1_START_X,
         Screen.HEIGHT // 2 - Players.START_Y_OFFSET,
-        Players.WIDTH,
-        Players.HEIGHT,
+        Players.HITBOX_WIDTH,
+        Players.HITBOX_HEIGHT,
         Players.SPEED,
     )
     player2 = Player(
         Players.PLAYER_2_ID,
         Players.PLAYER_2_START_X,
         Screen.HEIGHT // 2 - Players.START_Y_OFFSET,
-        Players.WIDTH,
-        Players.HEIGHT,
+        Players.HITBOX_WIDTH,
+        Players.HITBOX_HEIGHT,
         Players.SPEED,
     )
 
