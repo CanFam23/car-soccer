@@ -329,11 +329,6 @@ async def main():
                 pygame.quit()
                 sys.exit()
 
-        keys = pygame.key.get_pressed()
-        if keys[App.QUIT_KEY]:
-            pygame.quit()
-            sys.exit()
-
         countdown_active = countdown_remaining() > 0
         if not countdown_active:
             player1.handle_input(player2)

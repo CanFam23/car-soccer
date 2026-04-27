@@ -39,7 +39,7 @@ class Player:
         self.friction = 0.96
 
         # turning
-        self.theta = Players.ROTATION_STEP
+        self.theta = Players.ROTATION_STEP / 2
 
         # Base sprite faces right; rotation aligns it to the current direction.
         sprite_path = Players.SPRITES.get(self.id)
@@ -333,5 +333,7 @@ class Player:
     def draw(self, surface) -> None:
         """Draw the rotated player"""
         surface.blit(self.image, self.rotated_rect.topleft)
-        pygame.draw.rect(surface, (255, 255, 0), self.rotated_rect, 1)
-        pygame.draw.polygon(surface, (0, 255, 255), self.get_hitbox_corners(), 1)
+
+        # Hit boxes
+        # pygame.draw.rect(surface, (255, 255, 0), self.rotated_rect, 1)
+        # pygame.draw.polygon(surface, (0, 255, 255), self.get_hitbox_corners(), 1)
