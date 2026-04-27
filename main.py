@@ -26,7 +26,12 @@ right_goal = pygame.Rect(
 )
 
 ball = Ball(BallConfig.START_X, BallConfig.START_Y, BallConfig.RADIUS, Colors.YELLOW)
-font = pygame.font.SysFont(None, UI.TITLE_FONT_SIZE)
+font = pygame.font.SysFont(None, UI.TITLE_FONT_SIZE) # type: ignore
+score_font = pygame.font.SysFont(None, UI.SCORE_FONT_SIZE) # type: ignore
+countdown_font = pygame.font.SysFont(None, UI.COUNTDOWN_FONT_SIZE) # type: ignore
+countdown_end_time = pygame.time.get_ticks() + UI.COUNTDOWN_SECONDS * 1000
+player1_score = 0
+player2_score = 0
 
 # Spawn players at their kickoff positions.
 player1 = Player(
@@ -90,6 +95,34 @@ def draw_field():
 
     text = font.render(UI.TITLE_TEXT, True, Colors.WHITE)
     SCREEN.blit(text, (Screen.WIDTH // 2 - text.get_width() // 2, UI.TITLE_Y))
+
+
+def draw_score() -> None:
+    """Draw the current score."""
+    text = score_font.render(f"{player1_score} - {player2_score}", True, Colors.WHITE)
+    SCREEN.blit(text, (Screen.WIDTH // 2 - text.get_width() // 2, UI.SCORE_Y))
+
+
+def countdown_remaining() -> int:
+    """Return whole seconds remaining in the post-goal countdown."""
+    remaining_ms = max(0, countdown_end_time - pygame.time.get_ticks())
+    return math.ceil(remaining_ms / 1000)
+
+
+def draw_countdown() -> None:
+    """Draw the active countdown number over the field."""
+    remaining = countdown_remaining()
+    if remaining <= 0:
+        return
+
+    text = countdown_font.render(str(remaining), True, Colors.WHITE)
+    SCREEN.blit(
+        text,
+        (
+            Screen.WIDTH // 2 - text.get_width() // 2,
+            Screen.HEIGHT // 2 - text.get_height() // 2,
+        ),
+    )
 
 
 def sync_player_state(player):
@@ -284,6 +317,8 @@ def advance_ball(players):
 
 
 def run_game():
+    global player1_score, player2_score
+
     while True:
         CLOCK.tick(Screen.FPS)
 
@@ -297,30 +332,36 @@ def run_game():
             pygame.quit()
             sys.exit()
 
-        player1.handle_input(player2)
-        player2.handle_input(player1)
-        resolve_player_player_collision(player1, player2)
+        countdown_active = countdown_remaining() > 0
+        if not countdown_active:
+            player1.handle_input(player2)
+            player2.handle_input(player1)
+            resolve_player_player_collision(player1, player2)
 
-        advance_ball([player1, player2])
+            advance_ball([player1, player2])
 
-        # Check for goals
-        if ball.x - ball.radius < Field.MARGIN + Field.GOAL_WIDTH and left_goal.top < ball.y < left_goal.bottom:
-            print("Goal for Player 2!")
-            reset()
-        elif ball.x + ball.radius > Screen.WIDTH - Field.MARGIN - Field.GOAL_WIDTH and right_goal.top < ball.y < right_goal.bottom:
-            print("Goal for Player 1!")
-            reset()
+            # Check for goals
+            if ball.x - ball.radius < Field.MARGIN + Field.GOAL_WIDTH and left_goal.top < ball.y < left_goal.bottom:
+                player2_score += 1
+                print("Goal for Player 2!")
+                reset(start_countdown=True)
+            elif ball.x + ball.radius > Screen.WIDTH - Field.MARGIN - Field.GOAL_WIDTH and right_goal.top < ball.y < right_goal.bottom:
+                player1_score += 1
+                print("Goal for Player 1!")
+                reset(start_countdown=True)
 
         draw_field()
 
         # Draw players
         player1.draw(SCREEN)
         player2.draw(SCREEN)
+        draw_score()
+        draw_countdown()
 
         pygame.display.flip()
 
-def reset():
-    global player1, player2
+def reset(start_countdown: bool = False):
+    global player1, player2, countdown_end_time
     ball.x = BallConfig.START_X
     ball.y = BallConfig.START_Y
     ball.vx = 0
@@ -334,6 +375,7 @@ def reset():
         Players.HITBOX_HEIGHT,
         Players.SPEED,
     )
+
     player2 = Player(
         Players.PLAYER_2_ID,
         Players.PLAYER_2_START_X,
@@ -343,6 +385,10 @@ def reset():
         Players.SPEED,
     )
 
+    if start_countdown:
+        countdown_end_time = pygame.time.get_ticks() + UI.COUNTDOWN_SECONDS * 1000
+    else:
+        countdown_end_time = 0
 
 if __name__ == "__main__":
     run_game()

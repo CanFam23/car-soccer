@@ -48,6 +48,10 @@ class UI:
     TITLE_TEXT = Screen.TITLE
     TITLE_FONT_SIZE = 40
     TITLE_Y = 10
+    SCORE_FONT_SIZE = 42
+    SCORE_Y = 48
+    COUNTDOWN_FONT_SIZE = 96
+    COUNTDOWN_SECONDS = 3
 
 
 class App:
@@ -58,14 +62,15 @@ class Players:
     PLAYER_1_ID = 1
     PLAYER_2_ID = 2
 
-    PLAYER_1_START_X = 800
-    PLAYER_2_START_X = 80
-    START_Y_OFFSET = 20
-
     VISUAL_WIDTH = 64
     VISUAL_HEIGHT = 64
     HITBOX_WIDTH = 46
     HITBOX_HEIGHT = 46
+
+    PLAYER_1_START_X = Screen.WIDTH - (VISUAL_WIDTH * 2)
+    PLAYER_2_START_X = 80
+    START_Y_OFFSET = 20
+
     SPEED = 7
     SPRITES = {
         PLAYER_1_ID: BASE_DIR / "sprites" / "cars" / "RedStrip.png",
