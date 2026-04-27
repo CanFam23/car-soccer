@@ -1,6 +1,7 @@
 import sys
 import math
 import pygame
+import asyncio
 
 from ball import Ball
 from constants import App, Ball as BallConfig, Colors, Field, Players, Screen, UI
@@ -316,11 +317,12 @@ def advance_ball(players):
         ball.vy = 0
 
 
-def run_game():
+async def main():
     global player1_score, player2_score
 
     while True:
         CLOCK.tick(Screen.FPS)
+        await asyncio.sleep(0)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -391,4 +393,4 @@ def reset(start_countdown: bool = False):
         countdown_end_time = 0
 
 if __name__ == "__main__":
-    run_game()
+    asyncio.run(main())
