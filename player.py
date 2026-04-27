@@ -39,7 +39,7 @@ class Player:
         self.friction = 0.96
 
         # turning
-        self.theta = Players.ROTATION_STEP / 2
+        self.theta = Players.ROTATION_STEP / 1.5
 
         # Base sprite faces right; rotation aligns it to the current direction.
         sprite_path = Players.SPRITES.get(self.id)
