@@ -30,9 +30,16 @@ ball = Ball(BallConfig.START_X, BallConfig.START_Y, BallConfig.RADIUS, Colors.YE
 font = pygame.font.SysFont(None, UI.TITLE_FONT_SIZE) # type: ignore
 score_font = pygame.font.SysFont(None, UI.SCORE_FONT_SIZE) # type: ignore
 countdown_font = pygame.font.SysFont(None, UI.COUNTDOWN_FONT_SIZE) # type: ignore
-countdown_end_time = pygame.time.get_ticks() + UI.COUNTDOWN_SECONDS * 1000
+menu_title_font = pygame.font.SysFont(None, 74) # type: ignore
+menu_font = pygame.font.SysFont(None, 34) # type: ignore
+button_font = pygame.font.SysFont(None, 42) # type: ignore
+WINNING_SCORE = 5
+countdown_end_time = 0
+game_started = False
+winner_text = None
 player1_score = 0
 player2_score = 0
+start_button = pygame.Rect(Screen.WIDTH // 2 - 105, 440, 210, 64)
 
 # Spawn players at their kickoff positions.
 player1 = Player(
@@ -124,6 +131,114 @@ def draw_countdown() -> None:
             Screen.HEIGHT // 2 - text.get_height() // 2,
         ),
     )
+
+
+def draw_centered_text(text: str, font_obj, y: int, color=Colors.WHITE) -> None:
+    """Draw a single centered text line."""
+    rendered = font_obj.render(text, True, color)
+    SCREEN.blit(rendered, (Screen.WIDTH // 2 - rendered.get_width() // 2, y))
+
+
+def draw_home_screen() -> None:
+    """Draw the home screen with player controls and start button."""
+    SCREEN.fill(Colors.BLACK)
+    pygame.draw.rect(
+        SCREEN,
+        Colors.GREEN,
+        (
+            Field.MARGIN,
+            Field.MARGIN,
+            Screen.WIDTH - 2 * Field.MARGIN,
+            Screen.HEIGHT - 2 * Field.MARGIN,
+        ),
+    )
+
+    draw_centered_text(Screen.TITLE, menu_title_font, 88)
+    draw_centered_text(f"First to {WINNING_SCORE} goals wins.", menu_font, 160)
+
+    p1_lines = [
+        "Player 1",
+        "Arrow Up: Drive forward",
+        "Arrow Down: Reverse",
+        "Arrow Left / Right: Turn",
+    ]
+    p2_lines = [
+        "Player 2",
+        "W: Drive forward",
+        "S: Reverse",
+        "A / D: Turn",
+    ]
+
+    for index, line in enumerate(p1_lines):
+        color = Colors.RED if index == 0 else Colors.WHITE
+        text = menu_font.render(line, True, color)
+        SCREEN.blit(text, (190, 230 + index * 40))
+
+    for index, line in enumerate(p2_lines):
+        color = Colors.BLUE if index == 0 else Colors.WHITE
+        text = menu_font.render(line, True, color)
+        SCREEN.blit(text, (600, 230 + index * 40))
+
+    mouse_pos = pygame.mouse.get_pos()
+    button_color = (255, 255, 255) if start_button.collidepoint(mouse_pos) else Colors.YELLOW
+    text_color = Colors.BLACK
+    pygame.draw.rect(SCREEN, button_color, start_button, border_radius=8)
+    pygame.draw.rect(SCREEN, Colors.WHITE, start_button, 3, border_radius=8)
+    button_text = button_font.render("START", True, text_color)
+    SCREEN.blit(
+        button_text,
+        (
+            start_button.centerx - button_text.get_width() // 2,
+            start_button.centery - button_text.get_height() // 2,
+        ),
+    )
+    draw_centered_text("Press Enter or Space to start", menu_font, 522)
+
+
+def draw_winner_screen() -> None:
+    """Draw the winner overlay after a player reaches the target score."""
+    draw_field()
+    player1.draw(SCREEN)
+    player2.draw(SCREEN)
+    draw_score()
+
+    overlay = pygame.Surface(Screen.SIZE, pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 170))
+    SCREEN.blit(overlay, (0, 0))
+
+    draw_centered_text(winner_text or "Game Over", menu_title_font, 175)
+    draw_centered_text(f"Final Score: {player1_score} - {player2_score}", menu_font, 255)
+
+    mouse_pos = pygame.mouse.get_pos()
+    button_color = (255, 255, 255) if start_button.collidepoint(mouse_pos) else Colors.YELLOW
+    pygame.draw.rect(SCREEN, button_color, start_button, border_radius=8)
+    pygame.draw.rect(SCREEN, Colors.WHITE, start_button, 3, border_radius=8)
+    button_text = button_font.render("RESTART", True, Colors.BLACK)
+    SCREEN.blit(
+        button_text,
+        (
+            start_button.centerx - button_text.get_width() // 2,
+            start_button.centery - button_text.get_height() // 2,
+        ),
+    )
+    draw_centered_text("Press Enter or Space to play again", menu_font, 522)
+
+
+def start_new_game() -> None:
+    """Reset score and start a new match."""
+    global game_started, winner_text, player1_score, player2_score
+    player1_score = 0
+    player2_score = 0
+    winner_text = None
+    game_started = True
+    reset(start_countdown=True)
+
+
+def finish_game(text: str) -> None:
+    """Stop active play and show the winner screen."""
+    global winner_text
+    winner_text = text
+    reset(start_countdown=False)
 
 
 def sync_player_state(player):
@@ -318,7 +433,7 @@ def advance_ball(players):
 
 
 async def main():
-    global player1_score, player2_score
+    global player1_score, player2_score, game_started
 
     while True:
         CLOCK.tick(Screen.FPS)
@@ -328,6 +443,28 @@ async def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            if not game_started:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if start_button.collidepoint(event.pos):
+                        start_new_game()
+                elif event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    start_new_game()
+            elif winner_text:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if start_button.collidepoint(event.pos):
+                        start_new_game()
+                elif event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    start_new_game()
+
+        if not game_started:
+            draw_home_screen()
+            pygame.display.flip()
+            continue
+
+        if winner_text:
+            draw_winner_screen()
+            pygame.display.flip()
+            continue
 
         countdown_active = countdown_remaining() > 0
         if not countdown_active:
@@ -341,11 +478,17 @@ async def main():
             if ball.x - ball.radius < Field.MARGIN + Field.GOAL_WIDTH and left_goal.top < ball.y < left_goal.bottom:
                 player2_score += 1
                 print("Goal for Player 2!")
-                reset(start_countdown=True)
+                if player2_score >= WINNING_SCORE:
+                    finish_game("Player 2 Wins!")
+                else:
+                    reset(start_countdown=True)
             elif ball.x + ball.radius > Screen.WIDTH - Field.MARGIN - Field.GOAL_WIDTH and right_goal.top < ball.y < right_goal.bottom:
                 player1_score += 1
                 print("Goal for Player 1!")
-                reset(start_countdown=True)
+                if player1_score >= WINNING_SCORE:
+                    finish_game("Player 1 Wins!")
+                else:
+                    reset(start_countdown=True)
 
         draw_field()
 
