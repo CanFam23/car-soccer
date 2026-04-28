@@ -28,9 +28,6 @@ class Player:
             self.direction = [1.0, 0.0]   # face right
             self.side_order = ['front', 'back', 'left', 'right']
 
-        # 1 forward, -1 backward, 0 idle (useful for effects/tuning).
-        self.move_dir = 0   # 1 forward, -1 backward, 0 idle
-
         # Car-like forward/back scalar speed projected onto facing direction.
         self.velocity = [0.0, 0.0]
         self.accel = 0.2
@@ -268,16 +265,11 @@ class Player:
             self.velocity[1] * self.direction[1]
         )
 
-        if speed_along_direction == 0:
-            self.move_dir = 0
-
         if keys[controls["move_forward"]]:
             speed_along_direction += self.accel
-            self.move_dir = 1
 
         if keys[controls["move_back"]]:
             speed_along_direction -= self.accel
-            self.move_dir = -1
 
         if speed_along_direction > self.max_speed:
             speed_along_direction = self.max_speed
